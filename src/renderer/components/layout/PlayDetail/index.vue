@@ -1,8 +1,8 @@
 <template lang="pug">
 transition(enter-active-class="animated slideInRight" leave-active-class="animated slideOutDown" @after-enter="handleAfterEnter" @after-leave="handleAfterLeave")
   div(v-if="isShowPlayerDetail" :class="[$style.container, { fullscreen: isFullscreen }]" @contextmenu="handleContextMenu")
-    div(:class="$style.bg")
-    //- div(:class="$style.bg" :style="bgStyle")
+    //div(:class="$style.bg")
+    div(:class="$style.bg" :style="bgStyle")
     //- div(:class="$style.bg2")
     ControlBtnsLeftHeader(v-if="appSetting['common.controlBtnPosition'] == 'left'")
     ControlBtnsRightHeader(v-else)
@@ -10,8 +10,8 @@ transition(enter-active-class="animated slideInRight" leave-active-class="animat
       div.left(:class="$style.left")
         //- div(:class="$style.info")
         div(:class="$style.info")
-          img(v-if="musicInfo.pic" :class="$style.img" :src="musicInfo.pic")
-          div.description(:class="['scroll', $style.description]")
+        img(v-if="musicInfo.pic" :class="$style.img" :src="musicInfo.pic" crossorigin="anonymous" @load="handleImageLoad")
+        div.description(:class="['scroll', $style.description]")
             p {{ $t('player__music_name') }}{{ musicInfo.name }}
             p {{ $t('player__music_singer') }}{{ musicInfo.singer }}
             p(v-if="musicInfo.album") {{ $t('player__music_album') }}{{ musicInfo.album }}
@@ -48,6 +48,7 @@ import ControlBtnsRightHeader from './ControlBtnsRightHeader.vue'
 import { registerAutoHideMounse, unregisterAutoHideMounse } from './autoHideMounse'
 import { appSetting } from '@renderer/store/setting'
 import { closeWindow, maxWindow, minWindow, setFullScreen } from '@renderer/utils/ipc'
+import { getImageColors } from './utils'
 
 export default {
   name: 'CorePlayDetail',
@@ -59,6 +60,35 @@ export default {
     MusicComment,
   },
   setup() {
+    // 添加新的状态
+    const colors = ref(null)
+    const bgStyle = ref({})
+
+    // 添加图片加载处理函数
+    const handleImageLoad = async(event) => {
+      if (!musicInfo.value.pic) return
+
+      const colorInfo = await getImageColors(musicInfo.value.pic)
+      if (colorInfo) {
+        colors.value = colorInfo
+        const [r, g, b] = colorInfo.dominant
+        bgStyle.value = {
+          '--bg-gradient': `linear-gradient(to bottom,
+            rgba(${r}, ${g}, ${b}, 0.8),
+            rgba(${r}, ${g}, ${b}, 0.3)
+          )`,
+          '--text-color': colorInfo.textColor,
+        }
+      }
+    }
+    // 监听音乐信息变化
+    watch(() => musicInfo.value.pic, async(newPic) => {
+      if (newPic) {
+        awaithandleImageLoad()
+      }
+    },
+    )
+
     const visibled = ref(false)
 
     let clickTime = 0
@@ -125,6 +155,9 @@ export default {
       close() {
         closeWindow()
       },
+      colors,
+      bgStyle,
+      handleImageLoad,
     }
   },
 }
@@ -160,25 +193,58 @@ export default {
     box-sizing: border-box;
   }
 }
+
+// .bg {
+//   position: absolute;
+//   width: 100%;
+//   height: 100%;
+//   top: 0;
+//   left: 0;
+//   background: var(--background-image) var(--background-image-position) no-repeat;
+//   background-size: var(--background-image-size);
+//   // background-size: 110% 110%;
+//   // filter: blur(60px);
+//   opacity: .7;
+//   z-index: -1;
+//   &:before {
+//     content: '';
+//     display: block;
+//     width: 100%;
+//     height: 100%;
+//     background-color: var(--color-app-background);
+//   }
+//   &:after {
+//     position: absolute;
+//     left: 0;
+//     top: 0;
+//     content: '';
+//     display: block;
+//     width: 100%;
+//     height: 100%;
+//     background-color: var(--color-main-background);
+//   }
+// }
+// 在 .bg 样式中修改
 .bg {
   position: absolute;
   width: 100%;
   height: 100%;
   top: 0;
   left: 0;
-  background: var(--background-image) var(--background-image-position) no-repeat;
-  background-size: var(--background-image-size);
-  // background-size: 110% 110%;
-  // filter: blur(60px);
-  opacity: .7;
+  background: var(--bg-gradient, var(--color-main-background));
+  transition: background 0.3s ease;
+  opacity: 1;
   z-index: -1;
+
   &:before {
     content: '';
     display: block;
     width: 100%;
     height: 100%;
     background-color: var(--color-app-background);
+    opacity: 0.3;
   }
+
   &:after {
     position: absolute;
     left: 0;
@@ -188,8 +254,26 @@ export default {
     width: 100%;
     height: 100%;
     background-color: var(--color-main-background);
+    opacity: 0.1;
   }
 }
+
+// 修改文字相关样式
+.description {
+  max-width: 300px;
+  margin-top: 15px;
+  padding-bottom: 15px;
+  min-height: 0;
+  transition: color 0.3s ease;
+
+  p {
+    line-height: 1.5;
+    font-size: 14px;
+    overflow-wrap: break-word;
+    color: var(--text-color, var(--color-font));
+  }
+}
+
 // .bg2 {
 //   position: absolute;
 //   width: 100%;
@@ -212,16 +296,20 @@ export default {
     :global {
       .left {
         flex-basis: 18%;
+
         .description p {
           font-size: 12px;
         }
       }
+
       .right {
         flex-basis: 30%;
+
         .lyricSelectContent {
           font-size: 14px;
         }
       }
+
       .comment {
         opacity: 1;
         transform: scaleX(1);
@@ -229,6 +317,7 @@ export default {
     }
   }
 }
+
 .left {
   flex: 0 0 40%;
   display: flex;
@@ -246,6 +335,7 @@ export default {
   max-width: 300px;
   min-height: 0;
 }
+
 .img {
   max-width: 100%;
   max-height: 80%;
@@ -254,11 +344,13 @@ export default {
   border-radius: 6px;
   opacity: .8;
 }
+
 .description {
   max-width: 300px;
   margin-top: 15px;
   padding-bottom: 15px;
   min-height: 0;
+
   p {
     line-height: 1.5;
     font-size: 14px;
@@ -277,6 +369,4 @@ export default {
   margin-left: 10px;
   transform: scaleX(0);
 }
-
-
 </style>
